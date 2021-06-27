@@ -1,2 +1,2 @@
-# RemindMe
-Set a reminder based on your location.
+# RemindMe[WIP]
+Application built using Flutter that reminds you something based on your location.
