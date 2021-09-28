@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:wearamask/widgets/mainHome.dart';
 import 'package:wearamask/widgets/newUserHome.dart';
 import './widgets/mapPage.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() {
-  runApp(MyApp());
+Future main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  //await PushNotifications().initState();
+  runApp(
+    MyApp(),
+  );
 }
 
 class MyApp extends StatelessWidget {

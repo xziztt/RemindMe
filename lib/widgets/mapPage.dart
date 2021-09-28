@@ -6,6 +6,9 @@ import 'package:wearamask/widgets/mainHome.dart';
 import '../drawer/drawerHome.dart';
 import 'dart:math' show cos, sqrt, asin;
 import 'dart:async';
+import 'package:provider/provider.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MapPage extends StatefulWidget {
   static const routeName = '/map-page';
@@ -13,16 +16,47 @@ class MapPage extends StatefulWidget {
   _MapPageState createState() => _MapPageState();
 }
 
+bool _isHomeConfirmed = false;
+Future<bool> isFirstTime() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  bool _isHomeSet = prefs.getBool('_isHomeConfirmed');
+  if (_isHomeSet != null && !_isHomeSet) {
+    prefs.setBool('_isFirstTime', false);
+    return false;
+  } else {
+    prefs.setBool('_isFirstTime', false);
+    return true;
+  }
+}
+
 Timer timer;
 double distanceBetweenPoints = 0;
+bool _haveNotified = false;
+TextEditingController distanceController,reminderController;
+String reminderText;
+SharedPreferences prefs;
 
 class _MapPageState extends State<MapPage> {
+  double minDistanceFromHome = 20.000;
+  showNotification() async {
+    final androidNotification = new AndroidNotificationDetails(
+        'id', 'cname', 'cdesc',
+        priority: Priority.high, importance: Importance.max);
+    var platform =
+        new NotificationDetails(android: androidNotification, iOS: null);
+    await flutterLocalNotificationsPlugin.show(
+        0, 'Flutter devs', 'ARE YOU WEARING A MASK ?', platform,
+        payload: 'REMINDER!');
+  }
+
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
   final Set<Marker> _myMarkers = {};
   Position position;
-  bool _isHomeConfirmed = false;
   bool _isMarkerSet = false;
   LatLng currentlySelectedPositionOnMap;
   GoogleMapController googleMapController;
+  
   //final LatLng _center = const LatLng(45.521563, -122.677433);
   Location location = Location();
 
@@ -35,13 +69,43 @@ class _MapPageState extends State<MapPage> {
     setState(() {
       distanceBetweenPoints = (12742 * asin(sqrt(a)));
     });
+
+    if (distanceBetweenPoints > 20.00 && !_haveNotified) {
+      _haveNotified = !_haveNotified;
+      showNotification();
+      //showNotification();
+    }
   }
 
   @override
   void initState() {
+    super.initState();
+
+    isHomeSet();
+    print("hereeee");
+
+    AndroidInitializationSettings androidInitializationSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    InitializationSettings initializationSettings = InitializationSettings(
+        android: androidInitializationSettings, iOS: null);
+
+    flutterLocalNotificationsPlugin.initialize(initializationSettings,
+        onSelectNotification: onSelectNotification);
     timer =
         Timer.periodic(Duration(seconds: 1), (Timer t) => getCurrentLocation());
-    super.initState();
+  }
+
+  void dispose(){
+    distanceController.dispose();
+    reminderController.dispose();
+    super.dispose();
+  }
+
+
+
+  Future onSelectNotification(String payload) {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) {}));
   }
 
   void _onMapCreated(GoogleMapController controller) {
@@ -66,8 +130,25 @@ class _MapPageState extends State<MapPage> {
 
   void homeConfirmed() {
     setState(() {
-      _isHomeConfirmed = true;
+      _setHomeTrue();
+      print("home is confirmed");
     });
+  }
+
+  _setHome(bool val) {
+    _isHomeConfirmed = val;
+  }
+
+  _setHomeTrue() async {
+    _isHomeConfirmed = true;
+    SharedPreferences sprefs = await SharedPreferences.getInstance();
+    sprefs.setBool('_isHomeConfirmed', true);
+  }
+
+  _setHomeFalse() async {
+    _isHomeConfirmed = false;
+    SharedPreferences sprefs = await SharedPreferences.getInstance();
+    sprefs.setBool('_isHomeConfirmed', false);
   }
 
   void addMarkerOnClick(LatLng currentlySelectedPosition) {
@@ -86,29 +167,71 @@ class _MapPageState extends State<MapPage> {
     print(_myMarkers.length);
   }
 
+  isHomeSet() async {
+    print("inside is home set");
+    var _isHomeSet = prefs.getBool('_isHomeConfirmed');
+    print("isHomeSet called");
+    if (_isHomeSet != null && !_isHomeSet) {
+      print("home set to isHomeSet");
+      _isHomeConfirmed = _isHomeSet;
+    } else {
+      _isHomeConfirmed = false;
+      print("home set to false");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final deviceQuery = MediaQuery.of(context);
     BuildContext scaffoldContext = context;
     return Scaffold(
-      drawer: _isHomeConfirmed ? DrawerHome(_isHomeConfirmed) : null,
+      drawer: _isHomeConfirmed
+          ? DrawerHome(
+              _isHomeConfirmed,
+              _setHomeFalse,
+            )
+          : null,
       appBar: _isHomeConfirmed
           ? AppBar(
               title: Text(distanceBetweenPoints.toString()),
               backgroundColor: Colors.black,
               actions: [
+                  IconButton(
+                      icon: Icon(Icons.notification_important),
+                      onPressed: showNotification),
                   PopupMenuButton(
                       onSelected: (selectedValue) {
                         if (selectedValue == 0) {
                           setState(() {
-                            _isHomeConfirmed = !_isHomeConfirmed;
+                            _setHome(false);
                           });
                         }
                         if (selectedValue == 1) {
                           setState(() {
                             showModalBottomSheet(
                                 context: context,
-                                builder: (_) {
+                                builder: (BuildContext context) {
+                                  return Container(
+                                    child: Column(
+                                      children: [
+                                        TextField(
+                                          controller: distanceController,
+                                          decoration: InputDecoration(
+                                              border: OutlineInputBorder(),
+                                              hintText: "Enter the distance"),
+                                        ),
+                                        TextField(
+                                          controller: reminderController,
+                                          onSubmitted: (data){
+                                            reminderText = reminderController.text;
+                                          },
+                                          decoration: InputDecoration(
+                                            hintText: "What do you want to be reminded about ?"
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
                                   /*ADD LOGIC TO CHANGE DISTANCE*/
                                 });
                           });
@@ -119,7 +242,10 @@ class _MapPageState extends State<MapPage> {
                               child: Text('Change Home'),
                               value: 0,
                             ),
-                            PopupMenuItem(child: Text('Change distance'))
+                            PopupMenuItem(
+                              child: Text('Change distance'),
+                              value: 1,
+                            )
                           ]),
                 ])
           : null,
@@ -132,7 +258,7 @@ class _MapPageState extends State<MapPage> {
                     setState(() {
                       currentlySelectedPositionOnMap = cords;
                     });
-                    print("currently");
+                    print("currently"); 
                     print(currentlySelectedPositionOnMap.latitude);
                     print(currentlySelectedPositionOnMap.longitude);
                   }, */
